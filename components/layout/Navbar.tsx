@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { useSiteIcon } from '@/components/SiteIconProvider';
 import { Icons } from '@/components/ui/Icon';
 import { siteConfig } from '@/lib/config/site-config';
 import { getSession, clearSession, hasPermission, type AuthSession } from '@/lib/store/auth-store';
 import { useRuntimeFeatures } from '@/components/RuntimeFeaturesProvider';
+import { useMultiClick } from '@/lib/hooks/useMultiClick';
 import { LogOut } from 'lucide-react';
 
 interface NavbarProps {
@@ -22,6 +24,25 @@ export function Navbar({ onReset, isPremiumMode = false }: NavbarProps) {
     const [session] = useState<AuthSession | null>(() => getSession());
     const { iptvEnabled } = useRuntimeFeatures();
     const siteIconSrc = useSiteIcon();
+    const router = useRouter();
+    const homeHref = isPremiumMode ? '/premium' : '/';
+
+    // Hidden shortcut: triple click on the logo enters premium mode,
+    // double click returns to viewing mode, single click keeps the default reset.
+    const handleIconGesture = useCallback((count: number) => {
+        if (count >= 3) {
+            router.push('/premium');
+            return;
+        }
+        if (count === 2) {
+            router.push('/');
+            return;
+        }
+        onReset();
+        router.push(homeHref);
+    }, [homeHref, onReset, router]);
+
+    const registerIconClick = useMultiClick(handleIconGesture);
 
     const handleLogout = () => {
         fetch('/api/auth/session', { method: 'DELETE' })
@@ -45,9 +66,22 @@ export function Navbar({ onReset, isPremiumMode = false }: NavbarProps) {
                 }}>
                     <div className="flex items-center justify-between gap-2 sm:gap-4">
                         <Link
-                            href={isPremiumMode ? '/premium' : '/'}
-                            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer min-w-0"
-                            onClick={onReset}
+                            href={homeHref}
+                            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer min-w-0 select-none touch-manipulation"
+                            onClick={(event) => {
+                                // Let modifier/middle clicks open the link normally.
+                                if (
+                                    event.button !== 0 ||
+                                    event.metaKey ||
+                                    event.ctrlKey ||
+                                    event.shiftKey ||
+                                    event.altKey
+                                ) {
+                                    return;
+                                }
+                                event.preventDefault();
+                                registerIconClick();
+                            }}
                             data-focusable
                         >
                             <div className="w-8 h-8 sm:w-10 sm:h-10 relative flex items-center justify-center flex-shrink-0">
@@ -57,6 +91,7 @@ export function Navbar({ onReset, isPremiumMode = false }: NavbarProps) {
                                     width={40}
                                     height={40}
                                     unoptimized
+                                    draggable={false}
                                     className="object-contain"
                                 />
                             </div>
